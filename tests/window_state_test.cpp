@@ -140,3 +140,69 @@ TEST_CASE("initial_geometry clamp_fn nullptr is safe") {
     auto g = initial_geometry(saved, nullptr);
     CHECK(g.size.w == 1280);
 }
+
+// ---------------------------------------------------------------------------
+// corrected_size_for_scale
+// ---------------------------------------------------------------------------
+
+TEST_CASE("corrected_size_for_scale same scale returns nullopt") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 1280; saved.logical_height = 720;
+    CHECK(corrected_size_for_scale(saved, 1.0).has_value() == false);
+}
+
+TEST_CASE("corrected_size_for_scale scale change above threshold returns resized size") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 1280; saved.logical_height = 720;
+    auto r = corrected_size_for_scale(saved, 2.0);
+    REQUIRE(r.has_value());
+    CHECK(r->w == 2560);
+    CHECK(r->h == 1440);
+}
+
+TEST_CASE("corrected_size_for_scale scale change below 0.01 threshold returns nullopt") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 1280; saved.logical_height = 720;
+    CHECK(corrected_size_for_scale(saved, 1.005).has_value() == false);
+}
+
+TEST_CASE("corrected_size_for_scale live_scale=0 returns nullopt") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 1280; saved.logical_height = 720;
+    CHECK(corrected_size_for_scale(saved, 0.0).has_value() == false);
+}
+
+TEST_CASE("corrected_size_for_scale saved.scale=0 uses kDefaultScale as reference") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 0.0f;
+    saved.logical_width = 1280; saved.logical_height = 720;
+    auto r = corrected_size_for_scale(saved, 2.0);
+    REQUIRE(r.has_value());
+    CHECK(r->w == 2560);
+    CHECK(r->h == 1440);
+}
+
+TEST_CASE("corrected_size_for_scale absent saved logical dims uses defaults") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 0; saved.logical_height = 0;
+    auto r = corrected_size_for_scale(saved, 2.0);
+    REQUIRE(r.has_value());
+    CHECK(r->w == Settings::WindowGeometry::kDefaultLogicalWidth  * 2);
+    CHECK(r->h == Settings::WindowGeometry::kDefaultLogicalHeight * 2);
+}
+
+TEST_CASE("corrected_size_for_scale result is lround(logical * live_scale)") {
+    Settings::WindowGeometry saved{};
+    saved.scale = 1.0f;
+    saved.logical_width = 100; saved.logical_height = 75;
+    // 75 * 1.5 = 112.5 -> lround = 113
+    auto r = corrected_size_for_scale(saved, 1.5);
+    REQUIRE(r.has_value());
+    CHECK(r->w == 150);
+    CHECK(r->h == 113);
+}

@@ -40,9 +40,22 @@ MpvInitGeometry initial_geometry(
     return result;
 }
 std::optional<PhysicalSize> corrected_size_for_scale(
-    const Settings::WindowGeometry& saved, double live_scale)
+    const Settings::WindowGeometry& saved,
+    double live_scale)
 {
-    (void)saved; (void)live_scale; return std::nullopt;
+    using WG = Settings::WindowGeometry;
+    if (live_scale <= 0.0) return std::nullopt;
+
+    float saved_scale = saved.scale > 0.f ? saved.scale : WG::kDefaultScale;
+    if (std::fabs(live_scale - saved_scale) < 0.01) return std::nullopt;
+
+    int lw = saved.logical_width  > 0 ? saved.logical_width  : WG::kDefaultLogicalWidth;
+    int lh = saved.logical_height > 0 ? saved.logical_height : WG::kDefaultLogicalHeight;
+
+    return PhysicalSize{
+        static_cast<int>(std::lround(lw * live_scale)),
+        static_cast<int>(std::lround(lh * live_scale))
+    };
 }
 Settings::WindowGeometry save_geometry(
     const Settings::WindowGeometry& previous, const SaveInputs& in)
