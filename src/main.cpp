@@ -895,58 +895,24 @@ int main(int argc, char* argv[]) {
 
     // Save window geometry while mpv is still alive.
     {
-        bool fs  = mpv::fullscreen();
-        bool max = mpv::window_maximized();
-
-        if (fs) {
-            // Preserve previous saved geometry; only update the maximized flag
-            // to reflect whether the user was maximized before entering fullscreen.
-            auto geom = Settings::instance().windowGeometry();
-            geom.maximized = g_was_maximized_before_fullscreen;
-            Settings::instance().setWindowGeometry(geom);
-        } else if (max) {
-            // Preserve the previous saved windowed size (don't save the
-            // maximized dimensions — they're the monitor size). On next
-            // launch the window opens maximized; on unmaximize, the
-            // preserved size is used.
-            auto geom = Settings::instance().windowGeometry();
-            geom.maximized = true;
-            Settings::instance().setWindowGeometry(geom);
-        } else {
-            // Normal windowed: save current size and position.
-            // Capture {pixel, logical, scale} so the next launch can restore
-            // losslessly on the same display, or rescale correctly when moved
-            // to a display with a different DPI.
-            // Prefer the effective pixel size we recorded during boot so
-            // save reflects what we asked mpv for, even if osd-dimensions
-            // lags behind a resize we issued.
-            int pw = mpv::window_pw();
-            int ph = mpv::window_ph();
-            if (pw <= 0 || ph <= 0) {
-                pw = mpv::osd_pw();
-                ph = mpv::osd_ph();
-            }
-            if (pw > 0 && ph > 0) {
-                Settings::WindowGeometry geom;
-                geom.width = pw;
-                geom.height = ph;
-
-                float scale = g_platform.get_scale ? g_platform.get_scale() : 1.0f;
-                if (scale <= 0.f) scale = 1.0f;
-                geom.scale = scale;
-                geom.logical_width  = static_cast<int>(std::lround(pw / scale));
-                geom.logical_height = static_cast<int>(std::lround(ph / scale));
-
-                geom.maximized = false;
-                int wx, wy;
-                if (g_platform.query_window_position &&
-                    g_platform.query_window_position(&wx, &wy)) {
-                    geom.x = wx;
-                    geom.y = wy;
-                }
-                Settings::instance().setWindowGeometry(geom);
-            }
+        window_state::SaveInputs in;
+        in.fullscreen = mpv::fullscreen();
+        in.maximized  = mpv::window_maximized();
+        in.was_maximized_before_fullscreen = g_was_maximized_before_fullscreen;
+        in.window_size  = { mpv::window_pw(), mpv::window_ph() };
+        in.osd_fallback = { mpv::osd_pw(),    mpv::osd_ph()    };
+        in.scale = g_platform.get_scale ? g_platform.get_scale() : 1.0f;
+        if (g_platform.query_window_position) {
+            in.query_position = [&]() -> std::optional<window_state::PhysicalPoint> {
+                int wx = 0, wy = 0;
+                if (g_platform.query_window_position(&wx, &wy))
+                    return window_state::PhysicalPoint{wx, wy};
+                return std::nullopt;
+            };
         }
+        auto new_geom = window_state::save_geometry(
+            Settings::instance().windowGeometry(), in);
+        Settings::instance().setWindowGeometry(new_geom);
         Settings::instance().save();
     }
 
