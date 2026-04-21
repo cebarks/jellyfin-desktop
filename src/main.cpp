@@ -22,6 +22,7 @@
 #include "wake_event.h"
 #include "paths/paths.h"
 #include "settings.h"
+#include "window_state.h"
 #include "titlebar_color.h"
 
 #include "player/media_session.h"
@@ -556,34 +557,24 @@ int main(int argc, char* argv[]) {
     g_mpv.SetOptionString("background-color", kBgColor.hex);
 
     // Restore saved window geometry. mpv's --geometry is always physical
-    // pixels (m_geometry_apply at third_party/mpv/options/m_option.c:2296
-    // assigns gm->w/h to widw/widh without applying dpi_scale), so we pass
-    // physical pixels here. If the live display scale differs from what
-    // these pixels were computed against, the post-CEF-init resize block
-    // below corrects the window size once display-hidpi-scale is known.
+    // pixels (m_geometry_apply in third_party/mpv/options/m_option.c
+    // assigns gm->w/h to widw/widh without applying dpi_scale). If the
+    // live display scale differs from the saved scale, the post-CEF-init
+    // DPI correction block below fixes the size once display-hidpi-scale
+    // is known.
     {
-        using WG = Settings::WindowGeometry;
-        auto saved_geom = Settings::instance().windowGeometry();
-
-        int w, h;
-        if (saved_geom.width > 0 && saved_geom.height > 0) {
-            w = saved_geom.width;
-            h = saved_geom.height;
-        } else {
-            w = WG::kDefaultPhysicalWidth;
-            h = WG::kDefaultPhysicalHeight;
-        }
-
-        int x = saved_geom.x, y = saved_geom.y;
-        if (g_platform.clamp_window_geometry)
-            g_platform.clamp_window_geometry(&w, &h, &x, &y);
-        std::string geom_str = std::to_string(w) + "x" + std::to_string(h);
-        if (x >= 0 && y >= 0) {
-            geom_str += "+" + std::to_string(x) + "+" + std::to_string(y);
+        auto g = window_state::initial_geometry(
+            Settings::instance().windowGeometry(),
+            g_platform.clamp_window_geometry);
+        std::string geom_str = std::to_string(g.size.w) + "x"
+                             + std::to_string(g.size.h);
+        if (g.has_position) {
+            geom_str += "+" + std::to_string(g.position.x)
+                      + "+" + std::to_string(g.position.y);
             g_mpv.SetOptionString("force-window-position", "yes");
         }
         g_mpv.SetOptionString("geometry", geom_str);
-        if (saved_geom.maximized)
+        if (g.maximized)
             g_mpv.SetOptionString("window-maximized", "yes");
     }
 

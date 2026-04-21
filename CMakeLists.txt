@@ -519,6 +519,7 @@ if(WIN32)
         src/cjson/cJSON.c
         src/jellyfin_api.cpp
         src/settings.cpp
+        src/window_state.cpp
         src/paths/paths.cpp
         src/wake_event_windows.cpp
     )
@@ -538,6 +539,7 @@ else()
         src/input/hotkeys.cpp
         src/single_instance.cpp
         src/settings.cpp
+        src/window_state.cpp
         src/paths/paths.cpp
         src/cjson/cJSON.c
         src/jellyfin_api.cpp
