@@ -58,9 +58,47 @@ std::optional<PhysicalSize> corrected_size_for_scale(
     };
 }
 Settings::WindowGeometry save_geometry(
-    const Settings::WindowGeometry& previous, const SaveInputs& in)
+    const Settings::WindowGeometry& previous,
+    const SaveInputs& in)
 {
-    (void)in; return previous;
+    if (in.fullscreen) {
+        auto geom = previous;
+        geom.maximized = in.was_maximized_before_fullscreen;
+        return geom;
+    }
+    if (in.maximized) {
+        auto geom = previous;
+        geom.maximized = true;
+        return geom;
+    }
+
+    // Windowed branch: build a fresh geometry from live state.
+    int pw = in.window_size.w;
+    int ph = in.window_size.h;
+    if (pw <= 0 || ph <= 0) {
+        pw = in.osd_fallback.w;
+        ph = in.osd_fallback.h;
+    }
+    if (pw <= 0 || ph <= 0) return previous;
+
+    Settings::WindowGeometry geom;
+    geom.width  = pw;
+    geom.height = ph;
+
+    float scale = in.scale;
+    if (scale <= 0.0f) scale = 1.0f;
+    geom.scale          = scale;
+    geom.logical_width  = static_cast<int>(std::lround(pw / scale));
+    geom.logical_height = static_cast<int>(std::lround(ph / scale));
+    geom.maximized = false;
+
+    if (in.query_position) {
+        if (auto pos = in.query_position()) {
+            geom.x = pos->x;
+            geom.y = pos->y;
+        }
+    }
+    return geom;
 }
 
 TransitionGuard::TransitionGuard(std::function<void()> on_begin_locked)

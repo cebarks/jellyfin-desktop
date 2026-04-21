@@ -206,3 +206,63 @@ TEST_CASE("corrected_size_for_scale result is lround(logical * live_scale)") {
     CHECK(r->w == 150);
     CHECK(r->h == 113);
 }
+
+// ---------------------------------------------------------------------------
+// save_geometry
+// ---------------------------------------------------------------------------
+
+TEST_CASE("save_geometry fullscreen preserves saved size and sets maximized from latch") {
+    Settings::WindowGeometry prev{};
+    prev.width = 1280; prev.height = 720;
+    prev.logical_width = 1280; prev.logical_height = 720;
+    prev.scale = 1.0f; prev.maximized = false;
+    prev.x = 50; prev.y = 60;
+
+    SaveInputs in{};
+    in.fullscreen = true; in.maximized = false;
+    in.was_maximized_before_fullscreen = true;
+    in.window_size = {1920, 1080}; in.osd_fallback = {1920, 1080};
+    in.scale = 1.0f; in.query_position = nullptr;
+
+    auto r = save_geometry(prev, in);
+    CHECK(r.width  == 1280);
+    CHECK(r.height == 720);
+    CHECK(r.x == 50);
+    CHECK(r.y == 60);
+    CHECK(r.scale == doctest::Approx(1.0f));
+    CHECK(r.maximized == true);  // from was_maximized_before_fullscreen latch
+}
+
+TEST_CASE("save_geometry fullscreen wins when both fullscreen and maximized true") {
+    Settings::WindowGeometry prev{};
+    prev.width = 1280; prev.height = 720; prev.maximized = false;
+
+    SaveInputs in{};
+    in.fullscreen = true; in.maximized = true;
+    in.was_maximized_before_fullscreen = false;
+    in.window_size = {1920, 1080}; in.osd_fallback = {1920, 1080};
+    in.scale = 1.0f; in.query_position = nullptr;
+
+    auto r = save_geometry(prev, in);
+    CHECK(r.width  == 1280);
+    CHECK(r.height == 720);
+    CHECK(r.maximized == false);  // fullscreen branch wins; latch = false
+}
+
+TEST_CASE("save_geometry maximized preserves saved windowed size and sets maximized=true") {
+    Settings::WindowGeometry prev{};
+    prev.width = 800; prev.height = 600;
+    prev.logical_width = 800; prev.logical_height = 600;
+    prev.scale = 1.0f; prev.maximized = false;
+
+    SaveInputs in{};
+    in.fullscreen = false; in.maximized = true;
+    in.was_maximized_before_fullscreen = false;
+    in.window_size = {2560, 1440}; in.osd_fallback = {2560, 1440};
+    in.scale = 1.0f; in.query_position = nullptr;
+
+    auto r = save_geometry(prev, in);
+    CHECK(r.width  == 800);
+    CHECK(r.height == 600);
+    CHECK(r.maximized == true);
+}
