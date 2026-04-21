@@ -390,3 +390,131 @@ TEST_CASE("TransitionGuard begin_locked sets active and captures transition size
     CHECK(g.transition_pw() == 1920);
     CHECK(g.transition_ph() == 1080);
 }
+
+TEST_CASE("TransitionGuard end_locked clears active and expected size") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    g.end_locked();
+    CHECK(g.active() == false);
+    CHECK(g.should_drop_frame(1280, 720) == false);  // inactive never drops
+}
+
+TEST_CASE("TransitionGuard on_begin_locked callback invoked on begin") {
+    bool called = false;
+    TransitionGuard g([&]{ called = true; });
+    g.begin_locked(100, 100);
+    CHECK(called == true);
+}
+
+TEST_CASE("TransitionGuard null on_begin_locked is safe") {
+    TransitionGuard g(nullptr);
+    g.begin_locked(100, 100);
+    CHECK(g.active() == true);
+}
+
+TEST_CASE("TransitionGuard double begin_locked resets state cleanly") {
+    int call_count = 0;
+    TransitionGuard g([&]{ ++call_count; });
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    g.set_pending_logical(960, 540);
+    // Second begin without prior end
+    g.begin_locked(1920, 1080);
+    CHECK(g.active() == true);
+    CHECK(g.transition_pw() == 1920);
+    CHECK(g.transition_ph() == 1080);
+    // expected and pending cleared on second begin
+    CHECK(g.should_drop_frame(1920, 1080) == true);  // no expected set
+    CHECK(g.pending_lw() == 0);
+    CHECK(g.pending_lh() == 0);
+    CHECK(call_count == 2);
+}
+
+TEST_CASE("TransitionGuard out-of-order end_locked when inactive is a no-op") {
+    TransitionGuard g;
+    g.end_locked();  // must not crash
+    CHECK(g.active() == false);
+}
+
+TEST_CASE("TransitionGuard should_drop_frame inactive never drops") {
+    TransitionGuard g;
+    CHECK(g.should_drop_frame(1920, 1080) == false);
+    CHECK(g.should_drop_frame(0, 0)       == false);
+}
+
+TEST_CASE("TransitionGuard should_drop_frame active no expected size drops all") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    // expected_w_ == 0 after begin
+    CHECK(g.should_drop_frame(1280, 720)  == true);
+    CHECK(g.should_drop_frame(1920, 1080) == true);
+    CHECK(g.should_drop_frame(0, 0)       == true);
+}
+
+TEST_CASE("TransitionGuard should_drop_frame active frame matches transition size drops") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    CHECK(g.should_drop_frame(1280, 720) == true);
+}
+
+TEST_CASE("TransitionGuard should_drop_frame active frame matches expected size does not drop") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    CHECK(g.should_drop_frame(1920, 1080) == false);
+}
+
+TEST_CASE("TransitionGuard maybe_end_on_frame matching expected ends transition and returns true") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    bool ended = g.maybe_end_on_frame(1920, 1080);
+    CHECK(ended == true);
+    CHECK(g.active() == false);
+}
+
+TEST_CASE("TransitionGuard maybe_end_on_frame non-matching returns false") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    bool ended = g.maybe_end_on_frame(1280, 720);
+    CHECK(ended == false);
+    CHECK(g.active() == true);
+}
+
+TEST_CASE("TransitionGuard maybe_end_on_frame inactive returns false") {
+    TransitionGuard g;
+    CHECK(g.maybe_end_on_frame(1920, 1080) == false);
+}
+
+TEST_CASE("TransitionGuard set_expected_size_locked updates drop predicate") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_expected_size_locked(1920, 1080);
+    CHECK(g.should_drop_frame(1920, 1080) == false);
+    g.set_expected_size_locked(2560, 1440);
+    CHECK(g.should_drop_frame(1920, 1080) == true);
+    CHECK(g.should_drop_frame(2560, 1440) == false);
+}
+
+TEST_CASE("TransitionGuard set_expected_size_locked matching transition size is ignored") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    // Setting expected to the same as transition pw/ph must be a no-op
+    // (would otherwise create an always-allow state that defeats the guard)
+    g.set_expected_size_locked(1280, 720);
+    // expected_w_ stays 0, so all frames drop
+    CHECK(g.should_drop_frame(1280, 720) == true);
+}
+
+TEST_CASE("TransitionGuard set_pending_logical preserved through end_locked") {
+    TransitionGuard g;
+    g.begin_locked(1280, 720);
+    g.set_pending_logical(640, 360);
+    g.end_locked();
+    // pending is not cleared by end_locked; platform reads it after end
+    CHECK(g.pending_lw() == 640);
+    CHECK(g.pending_lh() == 360);
+}
